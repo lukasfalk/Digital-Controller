@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <math.h>
+#include <bits/stdc++.h>
 // Support functions
 #include "src/udisplay.h"
 #include "src/urobot.h"
@@ -60,6 +61,7 @@ LogData * logs; // pointer
 int logsCnt; // used
 
 const float wheelBase = 0.13; // meters
+
 
 /**
 * Accumulated pose data */
@@ -248,7 +250,7 @@ void controlUpdate()
     }
   
 
-    float ref = desiredValue;
+    //float ref = desiredValue;
     //
     // set actuators
     int a0 = analogRead(A0);
@@ -313,8 +315,22 @@ void controlUpdate()
   }
 }
 
+float saturation(float val){
+  // Limits input to range -9.0 and 9.0
+  float lower_limit = -9.0;
+  float upper_limit = 9.0;
+  if (val < lower_limit){
+    return lower_limit;
+  } else if (val > upper_limit){
+    return upper_limit;
+  } else {
+    return val;
+  }
+}
+
 //////////////// Controllers //////////////////////
 float integrator(float taui, float e, float & xk, float & uk){
+  // integrates e, usinh taui, and old values xk and uk
   const float T = sampleTimeUs / 1e6;
   float x = e/taui;
   float u = T/2*(x + xk) + uk;
@@ -323,26 +339,46 @@ float integrator(float taui, float e, float & xk, float & uk){
   return u;
 }
 
-float velocityController(float ref, float vel){
-  const float Kp = 0.03;
-  const float taui = 0.0855;
-  float ekp = Kp * (ref - vel);
-  return ekp + integrator(taui, ekp, x1k, u1k);
-}
-
-float turnController(float ref, float vel){
-  const float Kp = 0.03;
-  const float taui = 0.0855;
-  float ekp = Kp * (ref - vel);
-  return ekp + integrator(taui, ekp, x2k, u2k);
-}
-
 //old values
 float x1k = 0, x2k = 0, u1k = 0, u2k = 0;
 
+float velocityController(float ref, float vel, float & xk, float & uk){
+  // Controller gains
+  const float Kp = 0.03;
+  const float taui = 0.0855;
+  float ref_left;
+
+  // Computing velocity - left
+  float ekp_left = Kp * (ref - vel);
+  float u_int_left = integrator(taui, ekp_left, x1k, u1k);
+  float u_left = saturation(ekp_left + u_int_left);
+
+  // Computing velocity - right
+  float ekp_right = Kp * (ref - vel);
+  float u_int_right = integrator(taui, ekp_right, x2k, u2k);
+  float u_right = saturation(ekp_right + u_int_right);
+
+  return u_left, u_right;
+}
+
+float turnController(float ref, float turnrate, float & xk, float & uk){
+  // Controller constants
+  const float kptr = 0.4;
+  const float tautr = 0.0062;
+  const float Ki_tr = 1/tautr;
+  const float al = 0.1;
+  const float taud = 0.0098;
+
+  // Computing terms
+  float ekptr = kptr * (ref - turnrate);
+  float u_int_tr = integrator(tautr, ekptr, xk, uk);
+  float u = ekptr + u_int_tr;
+
+  return saturation(u);
+}
+
 void update(){
-  const float Kp = 0.1458;
-  const float taui = 0.1357;
+/*
   float ref = desiredValue*gear/wheelradius;
   //motor 1
   float ekp1 = Kp * (-ref - encoder.motorVelocity[0]);
@@ -352,6 +388,7 @@ void update(){
   float ekp2 = Kp*(ref - encoder.motorVelocity[1]);
   float u2 = ekp2 + integrator(taui, ekp2, x2k, u2k);
   motor.motorVoltage[1] = u2;
+  */
 }
 
 
